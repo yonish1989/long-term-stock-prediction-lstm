@@ -1,0 +1,13 @@
+name: stock_predictor_env
+channels:
+  - defaults
+dependencies:
+  - python=3.9
+  - cudatoolkit=11.2
+  - cudnn=8.1.0
+  - pandas
+  - seaborn
+  - scikit-learn
+  - matplotlib
+  - jupyter
+  - nbconvert==5.4.1
