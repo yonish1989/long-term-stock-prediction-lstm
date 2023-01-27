@@ -8,9 +8,10 @@ import logging
 import argparse
 import os
 import models.lstm_dropout_dense_droput as stockPredictorModule
+import pickle
 
-def get_model_path():
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), "models", "model.m"))
+def get_model_path(name):
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "models", name))
 
 def parse_args():
     parser = argparse.ArgumentParser(description = "build and test the stock price prediction LSTM model")
@@ -22,11 +23,16 @@ def parse_args():
     args = parser.parse_args()
     return args.quandl_api_key, args.full_data, args.verbosity, args.train, args.save
 
-def train_model(X_train, X_val, X_test, y_train, y_val, y_test, dummy_columns_indeces, save):
+def train_model(X_train, X_val, X_test, y_train, y_val, y_test, dummy_columns_indeces, save, column_list, scale_data = True):
     print("training the model")
     stock_price_predictior = stockPredictorModule.stockPricePredictor(len(X_train[0]), len(X_train[0][0]))
     stock_price_predictior.compile()
     X_train_new, y_train_new = utilities.train_data_augmentation(X_train, y_train, cfg.augmented_number, dummy_columns_indeces)
+    if scale_data:
+        scaler = utilities.StandardScaler3D()
+        X_train_new = scaler.fit_transform_3D(np.array(X_train_new))
+        X_val = scaler.transform_3D(np.array(X_val))
+        X_test = scaler.transform_3D(np.array(X_test))
     stock_price_predictior.fit(np.array(X_train_new), np.array(y_train_new), np.array(X_val), np.array(y_val))
     print("")
     print("model evalutations: ")
@@ -38,13 +44,22 @@ def train_model(X_train, X_val, X_test, y_train, y_val, y_test, dummy_columns_in
     utilities.print_evaluation(evaluation_train, evaluation_test, evaluation_val, evaluation_train_aug)
     if save:
         print("saving model")
-        stock_price_predictior.model.save(get_model_path())
+        # save the model
+        stock_price_predictior.model.save(get_model_path("model.m"))
+        # save the scaler
+        if scale_data:
+            pickle.dump(scaler, open(get_model_path('scaler.pkl'), 'wb'))
+        # save the column list
+        pickle.dump(column_list, open(get_model_path('column_list.pkl'), 'wb'))
     return stock_price_predictior.model
 
-def test_model(model, X_test, y_test):
+def test_model(model, X_test, y_test, scale_data = True):
     if model is None:
         print("loading model")
-        model = tf.keras.models.load_model(get_model_path())
+        model = tf.keras.models.load_model(get_model_path("model.m"))
+        if scale_data:
+            scaler = pickle.load(open(get_model_path('scaler.pkl'), 'rb'))
+            X_test = scaler.transform_3D(np.array(X_test))
     print("testing model")
     evaluation_test = model.evaluate(np.array(X_test), np.array(y_test))
     print(f"model accuracy on test set: {evaluation_test[1]}")
@@ -58,8 +73,12 @@ def main():
     df = utilities.load_data(quandl_api_key, logger = logger)
     df = df[(df['calendardate'] >= cfg.start_year) & (df['calendardate'] <= cfg.end_year)]
     print("preprocessing the data")
-    df = utilities.handle_null_values(df, cfg.limit_null_percent, cfg.drop_null, cfg.fill_value, logger = logger)
-    df = utilities.drop_columns_with_one_dominant_value(df, cfg.one_value_threshold)
+    column_list = None
+    if train:
+        df = utilities.handle_null_values(df, cfg.limit_null_percent, cfg.drop_null, cfg.fill_value, logger = logger)
+        df = utilities.drop_columns_with_one_dominant_value(df, cfg.one_value_threshold)
+    else:
+        column_list = pickle.load(open(get_model_path('column_list.pkl'), 'rb'))
     print("adding meta data")
     ticker_list = None
     if not full_data:
@@ -67,6 +86,9 @@ def main():
     meta_df = utilities.load_meta_data(quandl_api_key, ticker_list, logger = logger)
     df, dummy_columns_indeces = utilities.add_meta_data(df, meta_df, cfg.meta_columns_to_use, cfg.rare_category_threshold, logger = logger)
     print("making time windows")
+    if not train:
+        df = df[df.columns.intersection(column_list)]
+        df = df.fillna(value = cfg.fill_value)
     X, y = utilities.build_features_labels_windows(df, cfg.start_year, cfg.end_year, cfg.years_interval, cfg.leap_interval, logger = logger)
     X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size = cfg.test_size)
     X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size = cfg.validation_size)
@@ -75,7 +97,7 @@ def main():
     if train:
         if not full_data:
             raise ValueError("can't train a model without the full sharadar dataset, exiting...")
-        model = train_model(X_train, X_val, X_test, y_train, y_val, y_test, dummy_columns_indeces, save)
+        model = train_model(X_train, X_val, X_test, y_train, y_val, y_test, dummy_columns_indeces, save, df.columns.tolist())
     if not full_data:
         # in case we only have the small free smaple we want to test all of it.
         test_model(model, X, y)

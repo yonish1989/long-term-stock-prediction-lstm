@@ -229,14 +229,20 @@ def print_evaluation(evaluation_train, evaluation_test, evaluation_val = None, e
     print(f"accuracy on test set: {evaluation_test[1]}")
 
 class MinMaxScaler3D(MinMaxScaler):
-    def fit_transform(self, X, y = None):
+    def fit_transform_3D(self, X, y = None):
         x = np.reshape(X, newshape = (X.shape[0] * X.shape[1], X.shape[2]))
         return np.reshape(super().fit_transform(x, y = y), newshape = X.shape)
+    def transform_3D(self, X):
+        x = np.reshape(X, newshape = (X.shape[0] * X.shape[1], X.shape[2]))
+        return np.reshape(super().transform(x), newshape = X.shape)
 
 class StandardScaler3D(StandardScaler):
-    def fit_transform(self, X, y = None):
+    def fit_transform_3D(self, X, y = None):
         x = np.reshape(X, newshape = (X.shape[0] * X.shape[1], X.shape[2]))
-        return np.reshape(super().fit_transform(x, y = y), newshape = X.shape)
+        return np.reshape(super().fit_transform(x, y = y), newshape = X.shape).tolist()
+    def transform_3D(self, X):
+        x = np.reshape(X, newshape = (X.shape[0] * X.shape[1], X.shape[2]))
+        return np.reshape(super().transform(x), newshape = X.shape).tolist()
 
 def apply3DScaler(X, scaler):
     X_new = X.copy()
