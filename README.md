@@ -1,4 +1,4 @@
-# Long term stock price prediction
+# Long term stock price prediction - Technion Deep learning course final project
 
 A project in Long term stock prediction.
 Based on [Long Term Stock Prediction Based On Financial
